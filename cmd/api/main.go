@@ -56,7 +56,6 @@ func main() {
 	}
 
 	app := fiber.New(myConfig)
-
 	//CORS
 	cors.SetCORSMiddleware(app)
 	//requestId
