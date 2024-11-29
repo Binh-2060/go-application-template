@@ -51,32 +51,37 @@ var myCustomLoggerTags = map[string]logger.LogFunc{
 Set logger middleware for REST API for JSON data
 */
 func SetLoggerMiddlewareJSON(app fiber.Router) {
-	var myLogger logger.Config
+	// var myLogger logger.Config
 
-	/// If in production mode, Display only necessary log datas
-	if os.Getenv("MODE") == "prod" {
-		myLogger = logger.Config{
-			Output: os.Stdout,
-			Format: `[API] ${cyan}${time} | ${yellow}${status}${reset} | ${blue}${method}${reset} | ${yellow}${latency}${reset} ` +
-				`| IP: ${green}${ip}${reset} | PATH: ${magenta}${path}${reset} | QUERY_PARAM: ${queryParams} | LOCALS: ${cyan}${locals:user} ${reset} | REQUEST_ID: ${locals:requestid} ` +
-				`| REQUEST_BODY: ${cyan}- ${reset} | REQUEST_HEADERS: ${cyan}- ${reset} ` +
-				`| RESPONSE_BODY: ${cyan}- ${reset} | ERROR: ${red}${error}` + "\n",
-			TimeFormat: "2006/01/02 - 15:04:05",
-			// TimeZone:   "Asia/Bangkok",
-		}
-	} else /* /// Else (uat or dev), Display all log datas */
-	{
-		myLogger = logger.Config{
-			CustomTags: myCustomLoggerTags,
-			Output:     os.Stdout,
-			Format: `[API] ${cyan}${time} | ${yellow}${status}${reset} | ${blue}${method}${reset} | ${yellow}${latency}${reset} ` +
-				`| IP: ${green}${ip}${reset} | PATH: ${magenta}${path}${reset} | QUERY_PARAM: ${queryParams} | LOCALS: ${cyan}${locals:user} ${reset} | REQUEST_ID: ${locals:requestid} ` +
-				`| REQUEST_BODY: ${cyan}${customReqBody} ${reset} | REQUEST_HEADERS: ${cyan}${header:Authorization} ${reset} ` +
-				`| RESPONSE_BODY: ${cyan}${resBody} ${reset} | ERROR: ${red}${error}` + "\n",
-			TimeFormat: "2006/01/02 - 15:04:05",
-			// TimeZone:   "Asia/Bangkok",
-		}
-	}
+	// /// If in production mode, Display only necessary log datas
+	// if os.Getenv("MODE") == "prod" {
+	// 	myLogger = logger.Config{
+	// 		Output: os.Stdout,
+	// 		Format: `[API] ${cyan}${time} | ${yellow}${status}${reset} | ${blue}${method}${reset} | ${yellow}${latency}${reset} ` +
+	// 			`| IP: ${green}${ip}${reset} | PATH: ${magenta}${path}${reset} | QUERY_PARAM: ${queryParams} | LOCALS: ${cyan}${locals:user} ${reset} | REQUEST_ID: ${locals:requestid} ` +
+	// 			`| REQUEST_BODY: ${cyan}- ${reset} | REQUEST_HEADERS: ${cyan}- ${reset} ` +
+	// 			`| RESPONSE_BODY: ${cyan}- ${reset} | ERROR: ${red}${error}` + "\n",
+	// 		TimeFormat: "2006/01/02 - 15:04:05",
+	// 		// TimeZone:   "Asia/Bangkok",
+	// 	}
+	// } else /* /// Else (uat or dev), Display all log datas */
+	// {
+	// 	myLogger = logger.Config{
+	// 		CustomTags: myCustomLoggerTags,
+	// 		Output:     os.Stdout,
+	// 		Format: `[API] ${cyan}${time} | ${yellow}${status}${reset} | ${blue}${method}${reset} | ${yellow}${latency}${reset} ` +
+	// 			`| IP: ${green}${ip}${reset} | PATH: ${magenta}${path}${reset} | QUERY_PARAM: ${queryParams} | LOCALS: ${cyan}${locals:user} ${reset} | REQUEST_ID: ${locals:requestid} ` +
+	// 			`| REQUEST_BODY: ${cyan}${customReqBody} ${reset} | REQUEST_HEADERS: ${cyan}${header:Authorization} ${reset} ` +
+	// 			`| RESPONSE_BODY: ${cyan}${resBody} ${reset} | ERROR: ${red}${error}` + "\n",
+	// 		TimeFormat: "2006/01/02 - 15:04:05",
+	// 		// TimeZone:   "Asia/Bangkok",
+	// 	}
+	// }
 
-	app.Use(logger.New(myLogger))
+	app.Use(logger.New(logger.Config{
+		Format:     `{"time": "${time}", "status": "${status}", "method": "${method}", "latency": "${latency}", "ip": "${ip}", "path": "${path}", "query_param": "${queryParams}", "user": "${locals:user}", "request_id": "${locals:requestid}", "request_body": "${customReqBody}", "request_headers": "-", "response_body": "-", "error": "${error}"}` + "\n",
+		CustomTags: myCustomLoggerTags,
+		Output:     os.Stdout,
+		TimeFormat: "2006/01/02 - 15:04:0",
+	}))
 }

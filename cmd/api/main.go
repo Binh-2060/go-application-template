@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Binh-2060/go-application-template/api/routes"
 	"github.com/Binh-2060/go-application-template/api/validators"
 	"github.com/Binh-2060/go-application-template/config/compress"
 	"github.com/Binh-2060/go-application-template/config/cors"
@@ -68,7 +69,6 @@ func main() {
 	compress.SetCompressMiddleware(app)
 	//helmet
 	helmet.SetHelmetMiddleware(app)
-
 	api := app.Group(apiVersion)
 	api.Get("/", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -89,6 +89,9 @@ func main() {
 
 	//logging
 	logger.SetLoggerMiddlewareJSON(api)
+
+	//set api routes
+	routes.SetRoutes(api)
 
 	// Run server in a separate goroutine so it doesn't block
 	go func() {
