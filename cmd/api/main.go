@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/Binh-2060/go-application-template/api/validators"
+	"github.com/Binh-2060/go-application-template/config/compress"
 	"github.com/Binh-2060/go-application-template/config/cors"
 	"github.com/Binh-2060/go-application-template/config/dotenv"
+	"github.com/Binh-2060/go-application-template/config/helmet"
 	"github.com/Binh-2060/go-application-template/config/logger"
 	requestid "github.com/Binh-2060/go-application-template/config/requestId"
 	"github.com/gofiber/fiber/v2"
@@ -62,6 +64,10 @@ func main() {
 	requestid.SetRequestIdMiddleware(app)
 	//validators
 	validators.Init()
+	//compress
+	compress.SetCompressMiddleware(app)
+	//helmet
+	helmet.SetHelmetMiddleware(app)
 
 	api := app.Group(apiVersion)
 	api.Get("/", func(c *fiber.Ctx) error {

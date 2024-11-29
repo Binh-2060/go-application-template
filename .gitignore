@@ -20,9 +20,9 @@
 # Go workspace file
 go.work
 
-
 ### MY GIT IGNORE ###
 .env
 build/*
 MY_NOTE.txt
 docker-compose.yaml
+tmp/
