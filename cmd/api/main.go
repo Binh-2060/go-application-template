@@ -69,7 +69,7 @@ func main() {
 	compress.SetCompressMiddleware(app)
 	//helmet
 	helmet.SetHelmetMiddleware(app)
-	api := app.Group(apiVersion)
+	api := app.Group("/api/" + apiVersion)
 	api.Get("/", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"API_NAME":     apiName,
