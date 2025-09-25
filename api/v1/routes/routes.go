@@ -6,4 +6,6 @@ func SetRoutes(router fiber.Router) {
 	sampleRoutes := router.Group("/sample-routes")
 	SetSampleRoute(sampleRoutes)
 
+	userRoutes := router.Group("/users")
+	SetUserRoutes(userRoutes)
 }

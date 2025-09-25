@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Binh-2060/go-application-template/api/routes"
+	"github.com/Binh-2060/go-application-template/api/v1/routes"
 	"github.com/Binh-2060/go-application-template/api/validators"
 	"github.com/Binh-2060/go-application-template/config/compress"
 	"github.com/Binh-2060/go-application-template/config/cors"
@@ -16,6 +16,7 @@ import (
 	"github.com/Binh-2060/go-application-template/config/helmet"
 	"github.com/Binh-2060/go-application-template/config/logger"
 	requestid "github.com/Binh-2060/go-application-template/config/requestId"
+	dbpkg "github.com/Binh-2060/go-application-template/pkg/db-pkg"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -23,6 +24,7 @@ func init() {
 	mode := os.Getenv("GO_ENV")
 	if mode == "" {
 		dotenv.SetDotenv()
+		mode = os.Getenv("GO_ENV")
 	}
 
 	//logging MODE of app
@@ -31,7 +33,6 @@ func init() {
 
 func main() {
 	var apiName = os.Getenv("API_NAME")
-	var apiVersion = os.Getenv("API_VERSION")
 	var mode = os.Getenv("GO_ENV")
 	var buildAt = os.Getenv("BUILD_DATE")
 	var startRunAt = time.Now().Format("2006-01-02 15:04:05")
@@ -69,11 +70,10 @@ func main() {
 	compress.SetCompressMiddleware(app)
 	//helmet
 	helmet.SetHelmetMiddleware(app)
-	api := app.Group("/api/" + apiVersion)
-	api.Get("/", func(c *fiber.Ctx) error {
+
+	app.Get("/", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"API_NAME":     apiName,
-			"API_VERSION":  apiVersion,
 			"MODE":         mode,
 			"BUILD_AT":     buildAt,
 			"START_RUN_AT": startRunAt,
@@ -81,17 +81,19 @@ func main() {
 	})
 
 	//check health status
-	api.Get("/healthz", func(c *fiber.Ctx) error {
+	app.Get("/healthz", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"status": "OK",
 		})
 	})
 
-	//logging
-	logger.SetLoggerMiddlewareJSON(api)
+	apiV1 := app.Group("/api/v1")
+	routes.SetRoutes(apiV1)
 
-	//set api routes
-	routes.SetRoutes(api)
+	//logging
+	logger.SetLoggerMiddlewareJSON(apiV1)
+
+	dbpkg.CreateDatabaseConnection()
 
 	// Run server in a separate goroutine so it doesn't block
 	go func() {
