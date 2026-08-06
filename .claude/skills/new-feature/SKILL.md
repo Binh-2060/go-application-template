@@ -11,13 +11,23 @@ Build a feature the same way `examples/crud` is built, driven by a table in `mig
 
 ## 1. Establish inputs
 
-Before writing code, settle:
+**Ask the user these two questions first, with `AskUserQuestion`, before writing any code.** Both change what gets built, and neither is derivable from the prompt. Ask them in one call.
 
-- **Which table.** Read its `migrations/*.sql`. If no migration exists, write it first and confirm it with the user — the schema drives everything below.
+1. **Which migration file?** Run `ls migrations/` and offer each file as an option, plus a final **"A new migration"** option. **Ask even when there is only one file** — a one-option question is still the confirmation that the user meant that table, and this scaffolds a lot of code off it. The options are a convenience, not a restriction: `AskUserQuestion` always carries a free-text "Other" choice, so say in the question text that the user may type a filename directly. If the user's prompt named a table with no matching `migrations/*.sql`, still ask — with that name offered as the new-migration option.
+
+   **If they pick "A new migration" (or name a file that does not exist):** ask a second `AskUserQuestion` for the **filename** before anything else — offer `migrations/<table>.sql` spellings derived from any resource name already mentioned, and rely on "Other" for a name you could not guess. Only once the filename is fixed, ask for the columns in prose (name, Postgres type, nullability, default — not enumerable as options). Write the file, show it, and get confirmation before scaffolding. The schema drives everything below, so never guess columns.
+2. **Generate tests?** Options: yes (full suite per §5) / no (feature code only). Default recommendation is yes. If no, skip §5 entirely and do not create a `tests/` folder — but still run the build/vet checks in §6.
+
+**Question 2 is asked every single run, without exception.** Nothing in a feature request implies a tests answer, so there is nothing to derive it from. If the user's prompt already named the table, drop question 1 and ask question 2 alone — a one-question call is still a call. The only way to skip a question is for the user to have already answered *that* question explicitly.
+
+Do not skip the call because the answer looks obvious, because only one migration exists, or because you are confident in a default. Ask, wait for the answer, then build.
+
+Then read the chosen `migrations/*.sql` before writing anything.
+
+Derive the rest without asking:
+
 - **Where it goes.** A real feature belongs in `internal/api/`, which already has `models/`, `repositories/`, `controllers/`, `services/`, `schemas/`, `routes/`. Only put it under `examples/` if it is another teaching example.
-- **Singular resource name** (`user`) and **plural route path** (`/users`).
-
-Ask only if the table is ambiguous or missing. Everything else is derivable.
+- **Singular resource name** (`user`) and **plural route path** (`/users`) — from the table name.
 
 ## 2. Files to create
 
@@ -32,7 +42,8 @@ For resource `<thing>` in `internal/api/`:
 | `services/<thing>.go` | Orchestration, transactions, pagination maths |
 | `controllers/<thing>.go` | Bind → validate → service → presenter |
 | `routes/<thing>.go` | `Set<Thing>Route(router fiber.Router)` |
-| `tests/*_test.go` | All tests for the feature, one package (see §5) |
+| `tests/*_test.go` | All tests for the feature, one package — **only if the user asked for tests** (see §5) |
+| `testsupport/testsupport.go` | `TestMain` + marker helper for this feature — only with tests (see §5) |
 
 Then register in `routes/routes.go`:
 
@@ -114,20 +125,31 @@ These are the parts that go wrong when copied carelessly.
 
 ## 5. Tests
 
+**Skip this whole section if the user answered "no tests" in §1.** Otherwise write the full suite below — all five files, both tags. A single happy-path test is not what was asked for.
+
 **Tests go in a `tests/` folder next to the feature's other packages**, not beside each file they exercise — `examples/crud/tests` is the working example. One package, `main_test.go` holding `TestMain` and the marker helper, one file per layer under test.
 
 That layout means the tests are outside the packages they test, so **anything they touch must be exported**. Export deliberately and say why in the doc comment (`repositories.BuildListUsersQuery` is public only so a test can assert the SQL). Where a value cannot reasonably be exported — the pagination defaults, for instance — write the expected value as a literal in the test with a comment naming the real definition.
 
-Split the files by what they need:
+Write these five files, mirroring `examples/crud/tests`:
 
-- **Untagged** `<thing>_repository_sql_test.go` — asserts the *generated SQL*. No database, so it runs in CI on every commit. Cover `$`-placeholders, the `ORDER BY` tiebreaker, `LIMIT`/`OFFSET`, and filter values arriving as bound arguments.
-- **`//go:build integration`** for everything else, run with `go test -tags=integration ./...`. These assert what only a real server can answer: sentinel translation, `ILIKE` case-insensitivity, whether a rollback removed rows, status codes and the response envelope.
+| File | Build tag | Covers |
+| --- | --- | --- |
+| `<thing>_repository_sql_test.go` | none | Generated SQL: `$`-placeholders (not MySQL `?`), the `ORDER BY` tiebreaker, `LIMIT`/`OFFSET`, filter values arriving as bound arguments |
+| `<thing>_repository_test.go` | `integration` | Sentinel translation (`Err<Thing>NotFound` for a missing row and for `DELETE`), partial update skipping nils, `ILIKE` case-insensitivity, paging |
+| `<thing>_service_test.go` | `integration` | Bulk-create rollback, pagination defaults, count and page agreeing |
+| `<thing>_route_test.go` | `integration` | Status codes (201/200/400/404), validation rejections, the `{timestamp, status, items, error}` envelope |
+| `main_test.go` | `integration` | `TestMain` and the local `marker(t)` wrapper |
+
+The untagged SQL file is the one that runs in CI on every commit, so a plain `go test ./...` must stay green with no container. Everything else needs Postgres: `go test -tags=integration ./...`.
 
 Rules that make the suite worth having:
 
 - **Assert against the function production calls.** If the SQL is built inline inside a query function, extract and export a `Build<Thing>Query(...)` so the test cannot rebuild the string itself — a test that reconstructs the query only proves it agrees with itself, and keeps passing after the real one breaks.
-- **Isolate by marker, never by truncating the table.** `testsupport.Marker(t)` gives a random prefix; put it in a text column, filter every query on it, delete by it in `t.Cleanup`. The prefix must contain no `_` or `%` — both are `LIKE` wildcards.
-- Reuse `examples/crud/testsupport` for `TestMain` and markers. `go test` runs in the package directory, so `.env` has to be found by walking up — `testsupport.Main` already does this.
+- **Isolate by marker, never by truncating the table.** The marker helper gives a random prefix; put it in a text column, filter every query on it, delete by it in `t.Cleanup`. The prefix must contain no `_` or `%` — both are `LIKE` wildcards.
+- **`examples/crud/testsupport` is not reusable as-is.** `Main(m)` is generic — copy or import it. `Marker(t)` is not: its cleanup is hardcoded to ``DELETE FROM users WHERE name LIKE $1``. Give the new feature its own `testsupport` package (or its own marker in `main_test.go`) deleting from *its* table on *its* text column. Never point a new feature's cleanup at `users`.
+- `go test` runs in the package directory, so `.env` has to be found by walking up — copy that loop from `testsupport.Main` rather than calling bare `godotenv.Load()`.
+- Tx-rollback isolation does not work here: `t.Fatal` is `runtime.Goexit`, which skips deferred rollbacks. Marker + `t.Cleanup` is the reason for the whole approach.
 - Test each thing at the layer where it is reachable. A rollback triggered by an over-long value cannot be tested over HTTP, because the `max=n` validate tag rejects it first.
 
 ## 6. Verify
@@ -137,7 +159,7 @@ gofmt -l . && go build ./... && go vet ./... && go test ./...
 go test -tags=integration ./...   # needs Postgres; check `docker ps`, vars in .env
 ```
 
-`gofmt -l .` must print nothing.
+`gofmt -l .` must print nothing. If the user declined tests, run everything except the `-tags=integration` line and stop here.
 
 Then confirm the tests can actually fail: change one thing in the code they cover (an `ILIKE` to `LIKE`, drop the `ORDER BY` tiebreaker), re-run, check the expected test fails, and put it back. A test that passes both ways is not testing anything.
 
