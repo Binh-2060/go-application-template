@@ -10,13 +10,13 @@ import (
 
 	"github.com/Binh-2060/go-application-template/api/routes"
 	"github.com/Binh-2060/go-application-template/api/validators"
-	"github.com/Binh-2060/go-application-template/config/compress"
-	"github.com/Binh-2060/go-application-template/config/cors"
-	"github.com/Binh-2060/go-application-template/config/dotenv"
-	"github.com/Binh-2060/go-application-template/config/helmet"
-	"github.com/Binh-2060/go-application-template/config/logger"
-	requestid "github.com/Binh-2060/go-application-template/config/requestId"
-	"github.com/gofiber/fiber/v2"
+	"github.com/Binh-2060/go-application-template/configs/compress"
+	"github.com/Binh-2060/go-application-template/configs/cors"
+	"github.com/Binh-2060/go-application-template/configs/dotenv"
+	"github.com/Binh-2060/go-application-template/configs/helmet"
+	"github.com/Binh-2060/go-application-template/configs/logger"
+	requestid "github.com/Binh-2060/go-application-template/configs/requestId"
+	"github.com/gofiber/fiber/v3"
 )
 
 func init() {
@@ -38,7 +38,7 @@ func main() {
 
 	myConfig := fiber.Config{
 		AppName: apiName,
-		ErrorHandler: func(ctx *fiber.Ctx, err error) error {
+		ErrorHandler: func(ctx fiber.Ctx, err error) error {
 			// Status code defaults to 500
 			code := fiber.StatusInternalServerError
 
@@ -70,7 +70,7 @@ func main() {
 	//helmet
 	helmet.SetHelmetMiddleware(app)
 	api := app.Group("/api/" + apiVersion)
-	api.Get("/", func(c *fiber.Ctx) error {
+	api.Get("/", func(c fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"API_NAME":     apiName,
 			"API_VERSION":  apiVersion,
@@ -81,7 +81,7 @@ func main() {
 	})
 
 	//check health status
-	api.Get("/healthz", func(c *fiber.Ctx) error {
+	api.Get("/healthz", func(c fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"status": "OK",
 		})

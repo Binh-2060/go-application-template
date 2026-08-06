@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 var validatorObj *validator.Validate
@@ -47,8 +47,8 @@ func ValidateUuid(uuid string) error {
 /*
 Parse and validate body
 */
-func ParseAndValidateBody(c *fiber.Ctx, out interface{}) error {
-	if err := c.BodyParser(out); err != nil {
+func ParseAndValidateBody(c fiber.Ctx, out interface{}) error {
+	if err := c.Bind().Body(out); err != nil {
 		return errors.New(err.Error())
 	}
 	return validateStructWithTags(out)
@@ -57,8 +57,8 @@ func ParseAndValidateBody(c *fiber.Ctx, out interface{}) error {
 /*
 Parse and validate params
 */
-func ParseAndValidateQueryParam(c *fiber.Ctx, out interface{}) error {
-	if err := c.QueryParser(out); err != nil {
+func ParseAndValidateQueryParam(c fiber.Ctx, out interface{}) error {
+	if err := c.Bind().Query(out); err != nil {
 		return errors.New(err.Error())
 	}
 	return validateStructWithTags(out)
