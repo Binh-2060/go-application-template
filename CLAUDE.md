@@ -25,13 +25,13 @@ go mod tidy
 
 # Run tests (no test files exist yet, but this is the invocation)
 go test ./...
-go test ./api/services/... -run TestName -v   # single package / test
+go test ./internal/api/services/... -run TestName -v   # single package / test
 
 # Docker build (multi-stage, static binary on alpine)
 docker build --build-arg API_VERSION=v1 --build-arg BUILD_DATE=$(date +%F) -t fiber-api .
 ```
 
-Environment variables are loaded by `configs/dotenv` when `GO_ENV` is unset (see `cmd/api/main.go` `init()`). It calls bare `godotenv.Load()`, which reads **`.env`** — not `.env.development`, despite the name. `.env` is gitignored; `.env.development` is the tracked template you copy from. Adding a var to `.env.development` alone has no runtime effect.
+Environment variables are loaded by `internal/config/dotenv` when `GO_ENV` is unset (see `cmd/api/main.go` `init()`). It calls bare `godotenv.Load()`, which reads **`.env`** — not `.env.development`, despite the name. `.env` is gitignored; `.env.development` is the tracked template you copy from. Adding a var to `.env.development` alone has no runtime effect.
 
 Required vars: `GO_ENV`, `API_NAME`, `API_VERSION`, `PORT`. Postgres vars: `DATABASE_URL` (overrides all others), or `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` / `DB_SSLMODE`, plus optional pool tuning `DB_MAX_CONNS`, `DB_MIN_CONNS`, `DB_MAX_CONN_LIFETIME`, `DB_MAX_CONN_IDLE_TIME`, `DB_CONNECT_TIMEOUT`.
 
@@ -50,17 +50,17 @@ These are the v3 API rules that differ from the v2 idioms found in most online F
 Request flow: `main.go` → global middleware → versioned route group → feature routes → controller → service → presenter.
 
 - **`cmd/api/main.go`** — composition root. Builds the Fiber app, wires global middleware in a fixed order (CORS → request ID → validators init → compress → helmet), mounts everything under `/api/{API_VERSION}`, adds inline `/` (build info) and `/healthz` endpoints, then delegates feature routes to `routes.SetRoutes`. Also owns graceful shutdown via signal handling. The Fiber `ErrorHandler` here is the single place uncaught errors are converted to the standard JSON error envelope.
-- **`configs/*`** — one package per cross-cutting concern (cors, compress, helmet, requestId, logger, dotenv), each exposing a single `SetXMiddleware(app)`-style function called from `main.go`. Add new global middleware as a new package here, then wire it in `main.go`.
+- **`internal/config/*`** — one package per cross-cutting concern (cors, compress, helmet, requestId, logger, dotenv), each exposing a single `SetXMiddleware(app)`-style function called from `main.go`. Add new global middleware as a new package here, then wire it in `main.go`.
 - **`pkg/db`** — Postgres connection pool on `pgx/v5` + `pgxpool`. Holds a process-wide `*pgxpool.Pool`; `Init(ctx, ConfigFromEnv())` opens and pings it (a bad host/password fails at startup rather than on the first request), `Pool()` returns it for queries, `Ping(ctx)` backs `/healthz`, and `Close()` runs during graceful shutdown *after* `app.Shutdown()` so no handler holds a connection from a closed pool. `Pool()` panics if `Init` never ran. `Config.dsn()` URL-encodes the password, so `@` / `:` / `/` in passwords are safe.
 
   `tx.go` adds the transaction layer. Repositories should take a `db.Querier` (the read/write surface shared by `*pgxpool.Pool` and `pgx.Tx`) and resolve it with `db.Q(ctx)`, **not** `db.Pool()` — `Q` returns the in-flight transaction when there is one and the pool otherwise, so the same function works inside or outside a tx. `db.ExecTx(ctx, fn)` commits on nil error and rolls back otherwise (`ExecTxOptions` for isolation levels); it puts the tx on the context it hands `fn`, so a nested `ExecTx` becomes a **savepoint** rather than a second transaction. Rollback runs on `context.WithoutCancel`, so a cancelled request still cleans up instead of leaving the connection for the pool to reset.
-- **`api/routes/`** — `routes.go` has the top-level `SetRoutes(router fiber.Router)` that groups sub-routers by feature path (e.g. `/sample-routes`) and delegates to a per-feature `Set<Feature>Route` function (see `sample_route.go`). Add a new feature by creating `<feature>_route.go` here and registering it in `routes.go`.
-- **`api/controllers/`** — Fiber handlers (`func(c *fiber.Ctx) error`). Should stay thin: parse/validate input, call into `api/services`, format output via `api/presenters`.
-- **`api/services/`** — business logic, called by controllers. Currently empty/placeholder.
-- **`api/schemas/`** — request/response struct definitions, validated via `github.com/go-playground/validator/v10` struct tags. Currently empty/placeholder.
-- **`api/validators/`** — wraps `go-playground/validator`. `Init()` must run once before use (already called in `main.go`). Use `ParseAndValidateBody` / `ParseAndValidateQueryParam` in controllers to bind+validate in one step, and `ValidateUuid` for standalone UUID checks. Note this package validates *independently* of Fiber's own `StructValidator` hook (which is not configured on the app), so `go-playground` tags are only enforced when you route through these helpers.
-- **`api/presenters/response.go`** — the single source of truth for the JSON response envelope. Always shape controller output through `ResponseSuccess(data)` or `ResponseSuccessListData(data, currentPage, currentPageTotalItem, totalPage)` (pass `-1` for the pagination args when pagination doesn't apply) rather than constructing `fiber.Map` responses ad hoc. Error responses use the same envelope shape but are only constructed centrally in the `main.go` `ErrorHandler`.
-- **`api/middlewares/`** — route-level (as opposed to global) middleware; currently empty/placeholder.
+- **`internal/api/routes/`** — `routes.go` has the top-level `SetRoutes(router fiber.Router)` that groups sub-routers by feature path (e.g. `/sample-routes`) and delegates to a per-feature `Set<Feature>Route` function (see `sample_route.go`). Add a new feature by creating `<feature>_route.go` here and registering it in `routes.go`.
+- **`internal/api/controllers/`** — Fiber handlers (`func(c *fiber.Ctx) error`). Should stay thin: parse/validate input, call into `internal/api/services`, format output via `internal/api/presenters`.
+- **`internal/api/services/`** — business logic, called by controllers. Currently empty/placeholder.
+- **`internal/api/schemas/`** — request/response struct definitions, validated via `github.com/go-playground/validator/v10` struct tags. Currently empty/placeholder.
+- **`internal/api/validators/`** — wraps `go-playground/validator`. `Init()` must run once before use (already called in `main.go`). Use `ParseAndValidateBody` / `ParseAndValidateQueryParam` in controllers to bind+validate in one step, and `ValidateUuid` for standalone UUID checks. Note this package validates *independently* of Fiber's own `StructValidator` hook (which is not configured on the app), so `go-playground` tags are only enforced when you route through these helpers.
+- **`internal/api/presenters/response.go`** — the single source of truth for the JSON response envelope. Always shape controller output through `ResponseSuccess(data)` or `ResponseSuccessListData(data, currentPage, currentPageTotalItem, totalPage)` (pass `-1` for the pagination args when pagination doesn't apply) rather than constructing `fiber.Map` responses ad hoc. Error responses use the same envelope shape but are only constructed centrally in the `main.go` `ErrorHandler`.
+- **`internal/api/middlewares/`** — route-level (as opposed to global) middleware; currently empty/placeholder.
 
 ### Response envelope contract
 
@@ -68,7 +68,7 @@ Every JSON response (success or error) follows: `{ "timestamp", "status" (1 succ
 
 ### Logging
 
-`configs/logger` emits one JSON object per request. It must be mounted **before** any route on the group — Fiber only applies middleware to routes registered after it, so anything mounted above `SetLoggerMiddlewareJSON` is silently absent from the log. This bit the `/api/{version}` root endpoint once already.
+`internal/config/logger` emits one JSON object per request. It must be mounted **before** any route on the group — Fiber only applies middleware to routes registered after it, so anything mounted above `SetLoggerMiddlewareJSON` is silently absent from the log. This bit the `/api/{version}` root endpoint once already.
 
 The record is produced by encoding the `accessLog` struct through `LoggerFunc`, **not** by interpolating Fiber's `Format` template. That is deliberate: the template approach substitutes tags inside an already-quoted JSON string, so any body containing a `"` corrupts the line and makes the whole record unparseable. Encoding a struct makes the output valid JSON by construction. `Format` and `CustomTags` are unused; add fields to `accessLog`, not to a format string.
 
