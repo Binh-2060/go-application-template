@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/Binh-2060/go-application-template/configs/helmet"
 	"github.com/Binh-2060/go-application-template/configs/logger"
 	requestid "github.com/Binh-2060/go-application-template/configs/requestId"
+	"github.com/Binh-2060/go-application-template/pkg/db"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -26,6 +28,7 @@ func init() {
 	}
 
 	//logging MODE of app
+	mode = os.Getenv("GO_ENV")
 	log.Println("------ Running in '" + mode + "' mode... ------")
 }
 
@@ -58,6 +61,12 @@ func main() {
 		},
 	}
 
+	//fail fast connect database
+	if err := db.Init(context.Background(), db.ConfigFromEnv()); err != nil {
+		log.Fatalf("database connection failed: %v", err)
+	}
+	defer db.Close()
+
 	app := fiber.New(myConfig)
 	//CORS
 	cors.SetCORSMiddleware(app)
@@ -70,6 +79,13 @@ func main() {
 	//helmet
 	helmet.SetHelmetMiddleware(app)
 	api := app.Group("/api/" + apiVersion)
+
+	//logging
+	// Must be registered before any route on this group: Fiber only applies
+	// middleware to routes added after it, so anything mounted above this line
+	// is silently excluded from the access log.
+	logger.SetLoggerMiddlewareJSON(api)
+
 	api.Get("/", func(c fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"API_NAME":     apiName,
@@ -79,16 +95,6 @@ func main() {
 			"START_RUN_AT": startRunAt,
 		})
 	})
-
-	//check health status
-	api.Get("/healthz", func(c fiber.Ctx) error {
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "OK",
-		})
-	})
-
-	//logging
-	logger.SetLoggerMiddlewareJSON(api)
 
 	//set api routes
 	routes.SetRoutes(api)
@@ -111,6 +117,9 @@ func main() {
 	_ = app.Shutdown()
 
 	log.Println("Running cleanup tasks...")
+	// Close the pool only after Shutdown has drained in-flight requests, so no
+	// handler is left holding a connection from a closed pool.
+	db.Close()
 	// Your cleanup tasks go here ...
 
 	log.Println("Fiber was successful shutdown.")
