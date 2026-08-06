@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"errors"
-
 	"github.com/Binh-2060/go-application-template/examples/crud/schemas/requestbody"
 	"github.com/Binh-2060/go-application-template/examples/crud/services"
 	"github.com/Binh-2060/go-application-template/internal/api/presenters"
@@ -28,7 +26,7 @@ func CreateUser(c fiber.Ctx) error {
 
 	user, err := services.CreateUser(c.Context(), body)
 	if err != nil {
-		return toHTTPError(err)
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(presenters.ResponseSuccess(user))
@@ -45,7 +43,7 @@ func CreateUsers(c fiber.Ctx) error {
 
 	users, err := services.CreateUsers(c.Context(), body)
 	if err != nil {
-		return toHTTPError(err)
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(presenters.ResponseSuccess(users))
@@ -62,7 +60,7 @@ func ListUsers(c fiber.Ctx) error {
 
 	page, err := services.ListUsers(c.Context(), query)
 	if err != nil {
-		return toHTTPError(err)
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	return c.Status(fiber.StatusOK).JSON(presenters.ResponseSuccessListData(
@@ -81,7 +79,7 @@ func GetUser(c fiber.Ctx) error {
 
 	user, err := services.GetUser(c.Context(), id)
 	if err != nil {
-		return toHTTPError(err)
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	return c.Status(fiber.StatusOK).JSON(presenters.ResponseSuccess(user))
@@ -100,16 +98,13 @@ func UpdateUser(c fiber.Ctx) error {
 	if err := validators.ParseAndValidateBody(c, &body); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
-	if body.Name == nil && body.Surename == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "no updatable field supplied")
-	}
 
-	user, err := services.UpdateUser(c.Context(), id, body)
+	err = services.UpdateUser(c.Context(), id, body)
 	if err != nil {
-		return toHTTPError(err)
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	return c.Status(fiber.StatusOK).JSON(presenters.ResponseSuccess(user))
+	return c.Status(fiber.StatusOK).JSON(presenters.ResponseSuccess("SUCCESS"))
 }
 
 /*
@@ -122,7 +117,7 @@ func DeleteUser(c fiber.Ctx) error {
 	}
 
 	if err := services.DeleteUser(c.Context(), id); err != nil {
-		return toHTTPError(err)
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	return c.Status(fiber.StatusOK).JSON(presenters.ResponseSuccess(nil))
@@ -144,22 +139,4 @@ func userID(c fiber.Ctx) (string, error) {
 	}
 
 	return id, nil
-}
-
-/*
-Translate service errors into HTTP errors.
-
-Only the cases worth distinguishing are mapped; anything else is returned
-untouched and main.go's ErrorHandler renders it as a 500 in the standard error
-envelope.
-*/
-func toHTTPError(err error) error {
-	switch {
-	case errors.Is(err, services.ErrUserNotFound):
-		return fiber.NewError(fiber.StatusNotFound, "user not found")
-	case errors.Is(err, services.ErrNoUpdateFields):
-		return fiber.NewError(fiber.StatusBadRequest, "no updatable field supplied")
-	}
-
-	return err
 }

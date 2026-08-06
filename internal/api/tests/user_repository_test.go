@@ -8,15 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Binh-2060/go-application-template/examples/crud/models"
-	"github.com/Binh-2060/go-application-template/examples/crud/repositories"
+	"github.com/Binh-2060/go-application-template/internal/api/models"
+	"github.com/Binh-2060/go-application-template/internal/api/repositories"
 	"github.com/Binh-2060/go-application-template/pkg/db"
 )
 
 /*
 Repository tests against a real PostgreSQL.
 
-	go test -tags=integration ./examples/crud/...
+	go test -tags=integration ./internal/api/...
 
 These assert behaviour that only the real server can confirm: what pgx returns
 for a missing row, whether ILIKE is genuinely case-insensitive, whether a

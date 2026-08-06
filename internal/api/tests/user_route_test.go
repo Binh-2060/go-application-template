@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Binh-2060/go-application-template/examples/crud/routes"
-	"github.com/Binh-2060/go-application-template/examples/crud/schemas/responsebody"
+	"github.com/Binh-2060/go-application-template/internal/api/routes"
+	"github.com/Binh-2060/go-application-template/internal/api/schemas/responsebody"
 	"github.com/Binh-2060/go-application-template/internal/api/validators"
 	"github.com/gofiber/fiber/v3"
 )
@@ -20,7 +20,7 @@ import (
 /*
 End-to-end tests through the Fiber app.
 
-	go test -tags=integration ./examples/crud/...
+	go test -tags=integration ./internal/api/...
 
 These cover what the repository tests cannot see: that binding and validation
 actually run, that a sentinel becomes the right status code, and that every
@@ -196,10 +196,6 @@ func TestHTTP_MalformedIDIs400(t *testing.T) {
 	}
 }
 
-/*
-A well-formed id with no row behind it is the 404 case, which is only reachable
-if the repository sentinel survives all the way up to toHTTPError.
-*/
 /*
 controllers/user.go has no sentinel-to-status mapping: every service error,
 ErrUserNotFound included, becomes a 500. A true 404 here would need a

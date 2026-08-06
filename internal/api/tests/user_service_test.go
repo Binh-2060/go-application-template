@@ -7,15 +7,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Binh-2060/go-application-template/examples/crud/repositories"
-	"github.com/Binh-2060/go-application-template/examples/crud/schemas/requestbody"
-	"github.com/Binh-2060/go-application-template/examples/crud/services"
+	"github.com/Binh-2060/go-application-template/internal/api/repositories"
+	"github.com/Binh-2060/go-application-template/internal/api/schemas/requestbody"
+	"github.com/Binh-2060/go-application-template/internal/api/services"
 )
 
 /*
 Service-layer tests.
 
-	go test -tags=integration ./examples/crud/...
+	go test -tags=integration ./internal/api/...
 
 Two things live only at this layer and are unreachable from either side of it:
 the transaction that makes a bulk create atomic, and the pagination defaults.
@@ -86,7 +86,7 @@ asking the database for page 0 of 0 rows.
 
 The expected values are written as literals because defaultPage / defaultPerPage
 are unexported and this test lives outside the package. Change them in
-services/user_service.go and this test is what fails.
+services/user.go and this test is what fails.
 */
 func TestListUsers_AppliesDefaultsForZeroValues(t *testing.T) {
 	const wantPage = 1 // services.defaultPage

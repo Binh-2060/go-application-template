@@ -14,7 +14,9 @@ import (
 	"github.com/Binh-2060/go-application-template/internal/config/compress"
 	"github.com/Binh-2060/go-application-template/internal/config/cors"
 	"github.com/Binh-2060/go-application-template/internal/config/dotenv"
+	healthcheck "github.com/Binh-2060/go-application-template/internal/config/health_check"
 	"github.com/Binh-2060/go-application-template/internal/config/helmet"
+	"github.com/Binh-2060/go-application-template/internal/config/limiter"
 	"github.com/Binh-2060/go-application-template/internal/config/logger"
 	requestid "github.com/Binh-2060/go-application-template/internal/config/requestId"
 	"github.com/Binh-2060/go-application-template/pkg/db"
@@ -78,8 +80,12 @@ func main() {
 	compress.SetCompressMiddleware(app)
 	//helmet
 	helmet.SetHelmetMiddleware(app)
+	//limiter
+	limiter.SetAppLimiter(app)
+	//healthCheck
+	healthcheck.SetAppHealthCheck(app)
+	//group api
 	api := app.Group("/api/" + apiVersion)
-
 	//logging
 	// Must be registered before any route on this group: Fiber only applies
 	// middleware to routes added after it, so anything mounted above this line

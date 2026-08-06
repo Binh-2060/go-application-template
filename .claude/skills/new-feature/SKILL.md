@@ -29,7 +29,7 @@ For resource `<thing>` in `internal/api/`:
 | `schemas/requestbody/<thing>.go` | `Create<Thing>`, `Create<Things>`, `Update<Thing>`, `List<Things>` |
 | `schemas/responsebody/<thing>.go` | Wire struct + `New<Thing>` / `New<Things>` mappers |
 | `repositories/<thing>.go` | SQL only, sentinels, `<Thing>Filter` |
-| `services/<thing>_service.go` | Orchestration, transactions, pagination maths |
+| `services/<thing>.go` | Orchestration, transactions, pagination maths |
 | `controllers/<thing>.go` | Bind → validate → service → presenter |
 | `routes/<thing>.go` | `Set<Thing>Route(router fiber.Router)` |
 | `tests/*_test.go` | All tests for the feature, one package (see §5) |
@@ -96,7 +96,7 @@ These are the parts that go wrong when copied carelessly.
 **schemas**
 
 - Response types are separate from models on purpose — the model tracks the table, the schema tracks the API contract.
-- `Update<Thing>` uses **pointer** fields. A plain `string` cannot tell "field omitted" from "field sent as empty", and PATCH depends on that distinction.
+- `Update<Thing>` uses plain, **required** fields — `PATCH` means "replace", not "merge" (`examples/crud`'s `UpdateUser` follows this). The repository's `Update<Thing>` can still take `*string`/pointer args per column and skip nils in the `SET` clause; only expose that as `omitempty` pointers on the request schema if the feature genuinely needs partial-field PATCH.
 - Query structs use `query:"..."` tags (Fiber v3 binds via `c.Bind().Query`).
 - `min`/`max` tags should mirror the column constraints so an oversized value returns a readable 400 instead of a database error.
 

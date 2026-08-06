@@ -58,9 +58,9 @@ Both ListUsers and CountUsers apply it through the same helper, which is what
 keeps a filtered page and its total from disagreeing.
 */
 type UserFilter struct {
-	// Name matches case-insensitively anywhere in the name. Empty means no
-	// name filter.
-	Name string
+	// String column matches case-insensitively anywhere in the String. Empty means no
+	// String or Q filter.
+	Q string
 }
 
 // Every query goes through db.Q(ctx), never db.Pool(): Q hands back the
@@ -193,14 +193,10 @@ Delete a user, or ErrUserNotFound if the id matched nothing.
 DELETE does not return ErrNoRows, so absence has to be read off the command tag.
 */
 func DeleteUser(ctx context.Context, id string) error {
-	tag, err := db.Q(ctx).Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	_, err := db.Q(ctx).Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrUserNotFound
-	}
-
 	return nil
 }
 
@@ -223,12 +219,12 @@ func BuildListUsersQuery(filter UserFilter, limit, offset int) (string, []any, e
 /*
 Add the filter's conditions to a builder.
 
-sq.ILike renders `name ILIKE $n` with the pattern as a bound argument, so the
+sq.ILike renders `name ILIKE $n` or string value `COLUMN ILIKE $n` with the pattern as a bound argument, so the
 value is never spliced into the SQL text.
 */
 func ApplyUserFilter(builder sq.SelectBuilder, filter UserFilter) sq.SelectBuilder {
-	if name := strings.TrimSpace(filter.Name); name != "" {
-		builder = builder.Where(sq.ILike{"name": "%" + name + "%"})
+	if q := strings.TrimSpace(filter.Q); q != "" {
+		builder = builder.Where(sq.ILike{"name": "%" + q + "%"})
 	}
 
 	return builder

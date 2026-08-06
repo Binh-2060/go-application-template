@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 
+	"github.com/Binh-2060/go-application-template/examples/crud/models"
 	"github.com/Binh-2060/go-application-template/examples/crud/repositories"
 	"github.com/Binh-2060/go-application-template/examples/crud/schemas/requestbody"
 	"github.com/Binh-2060/go-application-template/examples/crud/schemas/responsebody"
@@ -43,12 +44,19 @@ type PagedUsers struct {
 Create one user.
 */
 func CreateUser(ctx context.Context, in requestbody.CreateUser) (responsebody.User, error) {
-	user, err := repositories.CreateUser(ctx, in.Name, in.Surename)
-	if err != nil {
-		return responsebody.User{}, err
-	}
+	var err error
+	var user models.User
+	err = db.ExecTx(ctx, func(ctx context.Context, _ db.Querier) error {
+		userTx, err := repositories.CreateUser(ctx, in.Name, in.Surename)
+		if err != nil {
+			return err
+		}
 
-	return responsebody.NewUser(user), nil
+		user = userTx
+		return nil
+	})
+
+	return responsebody.NewUser(user), err
 }
 
 /*
@@ -114,27 +122,19 @@ func ListUsers(ctx context.Context, in requestbody.ListUsers) (PagedUsers, error
 
 	// One filter value for both queries, so the total always describes the same
 	// set of rows the page was drawn from.
-	filter := repositories.UserFilter{Name: in.Name}
-
-	err := db.ExecTx(ctx, func(ctx context.Context, _ db.Querier) error {
-		var err error
-		if total, err = repositories.CountUsers(ctx, filter); err != nil {
-			return err
-		}
-
-		rows, err := repositories.ListUsers(ctx, filter, perPage, (page-1)*perPage)
-		if err != nil {
-			return err
-		}
-		users = responsebody.NewUsers(rows)
-
-		return nil
-	})
+	filter := repositories.UserFilter{Q: in.Q}
+	total, err := repositories.CountUsers(ctx, filter)
 	if err != nil {
 		return PagedUsers{}, err
 	}
 
-	// Ceiling division without floats.
+	offset := (page - 1) * perPage
+	rows, err := repositories.ListUsers(ctx, filter, perPage, offset)
+	if err != nil {
+		return PagedUsers{}, err
+	}
+
+	users = responsebody.NewUsers(rows)
 	totalPage := (total + perPage - 1) / perPage
 
 	return PagedUsers{
@@ -148,18 +148,31 @@ func ListUsers(ctx context.Context, in requestbody.ListUsers) (PagedUsers, error
 /*
 Apply a partial update and return the stored row.
 */
-func UpdateUser(ctx context.Context, id string, in requestbody.UpdateUser) (responsebody.User, error) {
-	user, err := repositories.UpdateUser(ctx, id, in.Name, in.Surename)
+func UpdateUser(ctx context.Context, id string, in requestbody.UpdateUser) error {
+	userInfo, err := repositories.GetUserByID(ctx, id)
 	if err != nil {
-		return responsebody.User{}, err
+		return err
 	}
 
-	return responsebody.NewUser(user), nil
+	err = db.ExecTx(ctx, func(ctx context.Context, _ db.Querier) error {
+		_, err := repositories.UpdateUser(ctx, userInfo.ID, &in.Name, &in.Surename)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return nil
 }
 
 /*
 Delete a user, or ErrUserNotFound.
 */
 func DeleteUser(ctx context.Context, id string) error {
-	return repositories.DeleteUser(ctx, id)
+	err := db.ExecTx(ctx, func(ctx context.Context, _ db.Querier) error {
+		err := repositories.DeleteUser(ctx, id)
+		return err
+	})
+	return err
 }

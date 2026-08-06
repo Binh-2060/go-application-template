@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Binh-2060/go-application-template/examples/crud/repositories"
+	"github.com/Binh-2060/go-application-template/internal/api/repositories"
 	sq "github.com/Masterminds/squirrel"
 )
 

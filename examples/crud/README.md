@@ -25,24 +25,22 @@ surename   varchar(200)                                       not null
 | -------- | ----------------- | ------------------------------- | ------- |
 | `POST`   | `/users`          | `{name, surename}`              | 201     |
 | `POST`   | `/users/bulk`     | `{users: [{name, surename}]}`   | 201     |
-| `GET`    | `/users`          | `?page=1&per_page=20&name=ada`  | 200     |
+| `GET`    | `/users`          | `?page=1&per_page=20&q=ada`     | 200     |
 | `GET`    | `/users/:id`      | —                               | 200     |
-| `PATCH`  | `/users/:id`      | `{name?, surename?}`            | 200     |
+| `PATCH`  | `/users/:id`      | `{name, surename}`              | 200     |
 | `DELETE` | `/users/:id`      | —                               | 200     |
 
 Every response uses the standard envelope from `internal/api/presenters` — `{timestamp, status, items, error}` — and `GET /users` adds the pagination block via `ResponseSuccessListData`.
 
 ## Wiring it up
 
-The example is compiled but not mounted. To run it, add to `internal/api/routes/routes.go`:
+The example is compiled but not mounted. `internal/api/routes/routes.go` starts
+with an empty `SetRoutes`; to run the example, fill it in:
 
 ```go
 import crudroutes "github.com/Binh-2060/go-application-template/examples/crud/routes"
 
 func SetRoutes(router fiber.Router) {
-	sampleRoutes := router.Group("/sample-routes")
-	SetSampleRoute(sampleRoutes)
-
 	userRoutes := router.Group("/users")
 	crudroutes.SetUserRoute(userRoutes)
 }
@@ -66,7 +64,7 @@ curl -X POST localhost:$PORT/api/$API_VERSION/users \
 
 **`services/`** — orchestration. `ListUsers` runs its count and its page inside one `db.ExecTx` so the two cannot disagree; `CreateUsers` wraps the whole loop in a transaction, so one bad row rolls back all of them.
 
-**`schemas/`** — the wire contract, split from the model on purpose. `requestbody.UpdateUser` uses `*string` so an omitted field is distinguishable from an empty one — a plain `string` can't tell "not sent" from "sent as empty". The repository then builds a `SET` clause containing only the fields that were actually supplied.
+**`schemas/`** — the wire contract, split from the model on purpose. `requestbody.UpdateUser` takes both fields as plain, required strings: `PATCH` here means "replace", not "merge". The repository's `UpdateUser` still takes `*string` per column and skips nils in the `SET` clause — that partial-update capability is still there at the repository layer, the request schema just doesn't expose it.
 
 **`controllers/`** — thin. Validate, call a service, shape the output. Errors are returned, not rendered: `main.go`'s `ErrorHandler` is the one place an error becomes JSON.
 
