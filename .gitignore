@@ -24,6 +24,5 @@ go.work
 .env
 build/*
 MY_NOTE.txt
-docker-compose.yaml
 tmp/
 postgres_data

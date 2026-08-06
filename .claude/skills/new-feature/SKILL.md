@@ -28,10 +28,10 @@ For resource `<thing>` in `internal/api/`:
 | `models/<thing>.go` | Struct mirroring the table, one field per column |
 | `schemas/requestbody/<thing>.go` | `Create<Thing>`, `Create<Things>`, `Update<Thing>`, `List<Things>` |
 | `schemas/responsebody/<thing>.go` | Wire struct + `New<Thing>` / `New<Things>` mappers |
-| `repositories/<thing>_repository.go` | SQL only, sentinels, `<Thing>Filter` |
+| `repositories/<thing>.go` | SQL only, sentinels, `<Thing>Filter` |
 | `services/<thing>_service.go` | Orchestration, transactions, pagination maths |
-| `controllers/<thing>_controller.go` | Bind → validate → service → presenter |
-| `routes/<thing>_route.go` | `Set<Thing>Route(router fiber.Router)` |
+| `controllers/<thing>.go` | Bind → validate → service → presenter |
+| `routes/<thing>.go` | `Set<Thing>Route(router fiber.Router)` |
 | `tests/*_test.go` | All tests for the feature, one package (see §5) |
 
 Then register in `routes/routes.go`:

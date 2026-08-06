@@ -4,32 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A minimal boilerplate/template for a Go REST API built on [Fiber v3](https://github.com/gofiber/fiber) (v3.4.0). It exists to be copied/forked as the starting point for real services — most packages currently contain only "sample" placeholder code demonstrating the intended structure.
+A minimal boilerplate/template for a Go REST API built on [Fiber v3](https://github.com/gofiber/fiber) (v3.4.0). It exists to be copied/forked as the starting point for real services — the packages under `internal/api/` contain only "sample" placeholder code demonstrating the intended structure. The one fully worked feature is [`examples/crud`](examples/crud/README.md) — a users CRUD on `migrations/users.sql`, compiled but deliberately not mounted.
 
 **Requires Go 1.25+** — Fiber v3's own `go.mod` declares `go 1.25.0`, so the toolchain floor is not optional.
-
-## Common commands
-
-```bash
-# Run the app locally with live reload (uses .air.toml)
-air
-
-# Run without live reload
-go run cmd/api/main.go
-
-# Build the binary (matches Dockerfile build)
-go build -o ./tmp/main cmd/api/main.go
-
-# Tidy/verify deps
-go mod tidy
-
-# Run tests (no test files exist yet, but this is the invocation)
-go test ./...
-go test ./internal/api/services/... -run TestName -v   # single package / test
-
-# Docker build (multi-stage, static binary on alpine)
-docker build --build-arg API_VERSION=v1 --build-arg BUILD_DATE=$(date +%F) -t fiber-api .
-```
 
 Environment variables are loaded by `internal/config/dotenv` when `GO_ENV` is unset (see `cmd/api/main.go` `init()`). It calls bare `godotenv.Load()`, which reads **`.env`** — not `.env.development`, despite the name. `.env` is gitignored; `.env.development` is the tracked template you copy from. Adding a var to `.env.development` alone has no runtime effect.
 
@@ -55,9 +32,9 @@ Request flow: `main.go` → global middleware → versioned route group → feat
 
   `tx.go` adds the transaction layer. Repositories should take a `db.Querier` (the read/write surface shared by `*pgxpool.Pool` and `pgx.Tx`) and resolve it with `db.Q(ctx)`, **not** `db.Pool()` — `Q` returns the in-flight transaction when there is one and the pool otherwise, so the same function works inside or outside a tx. `db.ExecTx(ctx, fn)` commits on nil error and rolls back otherwise (`ExecTxOptions` for isolation levels); it puts the tx on the context it hands `fn`, so a nested `ExecTx` becomes a **savepoint** rather than a second transaction. Rollback runs on `context.WithoutCancel`, so a cancelled request still cleans up instead of leaving the connection for the pool to reset.
 - **`internal/api/routes/`** — `routes.go` has the top-level `SetRoutes(router fiber.Router)` that groups sub-routers by feature path (e.g. `/sample-routes`) and delegates to a per-feature `Set<Feature>Route` function (see `sample_route.go`). Add a new feature by creating `<feature>_route.go` here and registering it in `routes.go`.
-- **`internal/api/controllers/`** — Fiber handlers (`func(c *fiber.Ctx) error`). Should stay thin: parse/validate input, call into `internal/api/services`, format output via `internal/api/presenters`.
-- **`internal/api/services/`** — business logic, called by controllers. Currently empty/placeholder.
-- **`internal/api/schemas/`** — request/response struct definitions, validated via `github.com/go-playground/validator/v10` struct tags. Currently empty/placeholder.
+- **`internal/api/controllers/`** — Fiber handlers (`func(c fiber.Ctx) error` — by value, `Ctx` is an interface in v3). Should stay thin: parse/validate input, call into `internal/api/services`, format output via `internal/api/presenters`.
+- **`internal/api/services/`** — business logic, called by controllers. Owns transactions (`db.ExecTx`) and pagination defaults. Currently empty/placeholder; `examples/crud/services` is the worked version.
+- **`internal/api/schemas/`** — request/response struct definitions, validated via `github.com/go-playground/validator/v10` struct tags, split into `requestbody/` and `responsebody/`. Currently empty/placeholder; `examples/crud/schemas` is the worked version.
 - **`internal/api/validators/`** — wraps `go-playground/validator`. `Init()` must run once before use (already called in `main.go`). Use `ParseAndValidateBody` / `ParseAndValidateQueryParam` in controllers to bind+validate in one step, and `ValidateUuid` for standalone UUID checks. Note this package validates *independently* of Fiber's own `StructValidator` hook (which is not configured on the app), so `go-playground` tags are only enforced when you route through these helpers.
 - **`internal/api/presenters/response.go`** — the single source of truth for the JSON response envelope. Always shape controller output through `ResponseSuccess(data)` or `ResponseSuccessListData(data, currentPage, currentPageTotalItem, totalPage)` (pass `-1` for the pagination args when pagination doesn't apply) rather than constructing `fiber.Map` responses ad hoc. Error responses use the same envelope shape but are only constructed centrally in the `main.go` `ErrorHandler`.
 - **`internal/api/middlewares/`** — route-level (as opposed to global) middleware; currently empty/placeholder.
@@ -66,26 +43,24 @@ Request flow: `main.go` → global middleware → versioned route group → feat
 
 Every JSON response (success or error) follows: `{ "timestamp", "status" (1 success / 0 fail), "items", "error" }`. Keep any new endpoint consistent with this shape via the presenters package instead of hand-rolling responses.
 
-### Logging
+### Tests
 
-`internal/config/logger` emits one JSON object per request. It must be mounted **before** any route on the group — Fiber only applies middleware to routes registered after it, so anything mounted above `SetLoggerMiddlewareJSON` is silently absent from the log. This bit the `/api/{version}` root endpoint once already.
-
-The record is produced by encoding the `accessLog` struct through `LoggerFunc`, **not** by interpolating Fiber's `Format` template. That is deliberate: the template approach substitutes tags inside an already-quoted JSON string, so any body containing a `"` corrupts the line and makes the whole record unparseable. Encoding a struct makes the output valid JSON by construction. `Format` and `CustomTags` are unused; add fields to `accessLog`, not to a format string.
-
-```json
-{"timestamp":"…","status":200,"method":"POST","latency_ms":0.054,"ip":"…","path":"…",
- "query_param":"…","user":"…","request_id":"…",
- "request_body":{…},"response_body":{…},"error":null}
+```bash
+go test ./...                    # SQL generation and other pure logic. No database.
+go test -tags=integration ./...  # everything else. Needs Postgres and the vars in .env
 ```
 
-`status` and `latency_ms` are numbers, `error` is `null` when absent, and bodies nest as real objects. `query_param`, `user` and `request_id` are omitted when empty. Bodies are `null` when absent, so consumers must not assume `request_body` is always an object — it is a string marker in the omitted/unparseable cases below.
+Anything provable from the generated SQL alone stays untagged so CI runs it on every commit; anything needing a real server goes behind `//go:build integration`. A plain `go test ./...` must stay green with no container running.
 
-Bodies **redact sensitive fields** before encoding:
+Copy the layout of `examples/crud/tests`:
 
-- Field names are matched case-insensitively, ignoring `_`, `-` and spaces, so `API-Key`, `api_key` and `apiKey` all hit the same rule. `sensitiveFragments` matches as a substring (`password` catches `user_password`); `sensitiveKeys` matches exactly, reserved for short names where a substring match would misfire (`pin` would otherwise redact `shipping`). Add new secrets to whichever list fits — **prefer `sensitiveFragments`** unless the name is short enough to collide.
-- A sensitive key is replaced wholesale rather than descended into, so nesting data under `credentials` cannot leak its children.
-- Only JSON (including `+json` vendor types), `x-www-form-urlencoded` and `multipart/form-data` are parsed. Any other content type logs as `[body omitted: <type>]`, and unparseable JSON as `UNPARSEABLE_JSON_REDACTED` — a body that cannot be structurally understood cannot be safely redacted, so it is dropped. Multipart is parsed field-by-field so raw part headers and file contents never reach the log.
-- Bodies over `maxLoggedBodyBytes` (2048) are described (`[body omitted: N bytes exceeds …]`) rather than truncated, since a truncated fragment no longer parses as what it claims to be.
-- Encoding uses **sonic** (`jsonCodec = sonic.ConfigDefault`), which JITs on amd64/arm64 and falls back to `encoding/json` elsewhere. Versus `ConfigStd`: object keys keep **input order rather than alphabetical**, and `<`/`>`/`&` stay literal.
-- Writes are serialised by `streamMu`. A record carrying two 2KB bodies can exceed the pipe-atomic write size, so a single `Write` call is not enough to prevent interleaving.
-- `DisableColors: true` is required — otherwise Fiber wraps `Stream` in a terminal-aware writer and injects ANSI escapes into the JSON.
+- **One `tests/` package per feature**, outside the packages under test — so anything a test touches must be exported (`repositories.Builder`, `BuildListUsersQuery` are public only for this). Unexportable values (pagination defaults) become literals with a comment naming the real definition.
+- **Assert against the function production calls**, extracting one if needed. A test that rebuilds the SQL itself only proves it agrees with itself — that already happened here once.
+- **Isolate by marker, never truncation.** `testsupport.Marker(t)` gives a random prefix, carried on every row, filtered in every query, deleted in `t.Cleanup`. No `_` or `%` in it — both are `LIKE` wildcards. (Tx-rollback isolation fails here: `t.Fatal` is `runtime.Goexit`, which skips the deferred rollback.)
+- **`testsupport.Main` owns `TestMain`** — `go test` runs in the package dir, so `.env` has to be found by walking up. Missing database under the tag panics rather than skips.
+- Test each thing at the layer where it is reachable; the bulk-create rollback is a service test because `max=200` rejects the bad value before HTTP could reach the database.
+- **Confirm the tests can fail** — flip one thing they cover (`ILIKE`→`LIKE`, drop the `ORDER BY` tiebreaker), check the right test fails, put it back.
+
+### Logging
+
+`internal/config/logger` emits one JSON object per request. Mount it **before** any route on the group — Fiber only applies middleware to routes registered after it, so anything above `SetLoggerMiddlewareJSON` is silently absent from the log (this already bit the `/api/{version}` root endpoint).
