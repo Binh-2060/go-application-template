@@ -3,9 +3,19 @@ package requestbody
 /*
 Create a user.
 
-Both fields are NOT NULL in the migration, and `name` / `surename` are
-varchar(200) — the max=200 tags keep an oversized value from becoming a
-database error the client cannot read.
+Both text columns are here and both are required, which is the rule for every
+varchar/text column: the client owns the value, so the API always lets it
+supply one.
+
+`name` is `default 'N/A' not null` in the migration and is still required. A
+default on a text column is a fallback for hand-written SQL inserts, not a
+reason to drop the field from the API — leaving it out would produce users
+nobody can name at creation, only rename afterwards. Only server-generated
+columns stay out of this struct: `id` and `created_at`, which the database
+fills and RETURNING reads back.
+
+Both are varchar(200), so the max=200 tags keep an oversized value from
+becoming a database error the client cannot read.
 */
 type CreateUser struct {
 	Name     string `json:"name" form:"name" validate:"required,min=1,max=200"`
