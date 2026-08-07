@@ -14,3 +14,5 @@ docker-compose.y*ml
 
 MY_NOTE.txt
 build/api
+tmp/
+devtools/db/postgres_data/

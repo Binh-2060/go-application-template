@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log"
 	"os"
@@ -8,15 +9,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Binh-2060/go-application-template/api/routes"
-	"github.com/Binh-2060/go-application-template/api/validators"
-	"github.com/Binh-2060/go-application-template/config/compress"
-	"github.com/Binh-2060/go-application-template/config/cors"
-	"github.com/Binh-2060/go-application-template/config/dotenv"
-	"github.com/Binh-2060/go-application-template/config/helmet"
-	"github.com/Binh-2060/go-application-template/config/logger"
-	requestid "github.com/Binh-2060/go-application-template/config/requestId"
-	"github.com/gofiber/fiber/v2"
+	"github.com/Binh-2060/go-application-template/internal/api/routes"
+	"github.com/Binh-2060/go-application-template/internal/api/validators"
+	"github.com/Binh-2060/go-application-template/internal/config/compress"
+	"github.com/Binh-2060/go-application-template/internal/config/cors"
+	"github.com/Binh-2060/go-application-template/internal/config/dotenv"
+	healthcheck "github.com/Binh-2060/go-application-template/internal/config/health_check"
+	"github.com/Binh-2060/go-application-template/internal/config/helmet"
+	"github.com/Binh-2060/go-application-template/internal/config/limiter"
+	"github.com/Binh-2060/go-application-template/internal/config/logger"
+	requestid "github.com/Binh-2060/go-application-template/internal/config/requestId"
+	"github.com/Binh-2060/go-application-template/pkg/db"
+	"github.com/gofiber/fiber/v3"
 )
 
 func init() {
@@ -26,6 +30,7 @@ func init() {
 	}
 
 	//logging MODE of app
+	mode = os.Getenv("GO_ENV")
 	log.Println("------ Running in '" + mode + "' mode... ------")
 }
 
@@ -38,7 +43,7 @@ func main() {
 
 	myConfig := fiber.Config{
 		AppName: apiName,
-		ErrorHandler: func(ctx *fiber.Ctx, err error) error {
+		ErrorHandler: func(ctx fiber.Ctx, err error) error {
 			// Status code defaults to 500
 			code := fiber.StatusInternalServerError
 
@@ -58,6 +63,12 @@ func main() {
 		},
 	}
 
+	//fail fast connect database
+	if err := db.Init(context.Background(), db.ConfigFromEnv()); err != nil {
+		log.Fatalf("database connection failed: %v", err)
+	}
+	defer db.Close()
+
 	app := fiber.New(myConfig)
 	//CORS
 	cors.SetCORSMiddleware(app)
@@ -69,8 +80,19 @@ func main() {
 	compress.SetCompressMiddleware(app)
 	//helmet
 	helmet.SetHelmetMiddleware(app)
+	//limiter
+	limiter.SetAppLimiter(app)
+	//healthCheck
+	healthcheck.SetAppHealthCheck(app)
+	//group api
 	api := app.Group("/api/" + apiVersion)
-	api.Get("/", func(c *fiber.Ctx) error {
+	//logging
+	// Must be registered before any route on this group: Fiber only applies
+	// middleware to routes added after it, so anything mounted above this line
+	// is silently excluded from the access log.
+	logger.SetLoggerMiddlewareJSON(api)
+
+	api.Get("/", func(c fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"API_NAME":     apiName,
 			"API_VERSION":  apiVersion,
@@ -79,16 +101,6 @@ func main() {
 			"START_RUN_AT": startRunAt,
 		})
 	})
-
-	//check health status
-	api.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "OK",
-		})
-	})
-
-	//logging
-	logger.SetLoggerMiddlewareJSON(api)
 
 	//set api routes
 	routes.SetRoutes(api)
@@ -111,6 +123,9 @@ func main() {
 	_ = app.Shutdown()
 
 	log.Println("Running cleanup tasks...")
+	// Close the pool only after Shutdown has drained in-flight requests, so no
+	// handler is left holding a connection from a closed pool.
+	db.Close()
 	// Your cleanup tasks go here ...
 
 	log.Println("Fiber was successful shutdown.")
