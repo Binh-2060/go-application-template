@@ -20,6 +20,10 @@ RSAManager signs and verifies RS256 tokens with an RSA keypair.
 Unlike Manager (HS256), signing and verifying don't share a secret: a
 service that only validates tokens can be handed just the public key, so a
 leak there can't be used to mint new tokens.
+
+Holds exactly one keypair and writes no "kid" header, so rotating keys means
+a window where old tokens fail to verify. Add kid selection here before the
+first rotation, not during it.
 */
 type RSAManager struct {
 	privateKey *rsa.PrivateKey // nil for a verify-only Manager
@@ -77,15 +81,7 @@ func (m *RSAManager) SignWithTTL(subject string, ttl time.Duration) (string, err
 		return "", ErrMissingPrivateKey
 	}
 
-	now := time.Now()
-	claims := Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    m.issuer,
-			Subject:   subject,
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
-		},
-	}
+	claims := newClaims(m.issuer, subject, ttl)
 
 	signed, err := jwt.NewWithClaims(jwt.SigningMethodRS256, claims).SignedString(m.privateKey)
 	if err != nil {
@@ -103,24 +99,10 @@ HS256 that would let an attacker sign with the public key as if it were an
 HMAC secret) and tokens whose issuer doesn't match the Manager's.
 */
 func (m *RSAManager) Verify(tokenString string) (*Claims, error) {
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
+	return verifyToken(tokenString, m.issuer, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
-			return nil, fmt.Errorf("jwt: unexpected signing method: %v", t.Header["alg"])
+			return nil, fmt.Errorf("%w: %v", ErrUnexpectedSigningMethod, t.Header["alg"])
 		}
 		return m.publicKey, nil
-	}, jwt.WithIssuer(m.issuer))
-
-	if err != nil {
-		if errors.Is(err, jwt.ErrTokenExpired) {
-			return nil, ErrExpiredToken
-		}
-		return nil, ErrInvalidToken
-	}
-
-	if !token.Valid {
-		return nil, ErrInvalidToken
-	}
-
-	return claims, nil
+	})
 }

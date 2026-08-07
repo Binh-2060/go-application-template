@@ -31,7 +31,7 @@ internal/config/*        one package per global middleware (cors, helmet, logger
 internal/api/             routes / controllers / services / repositories / models /
                           schemas / presenters / validators / middlewares
 pkg/db                   Postgres pool (pgx/v5) + transaction helpers
-pkg/jwt                  JWT sign/verify (HS256 Manager, RS256 RSAManager), not yet wired to a route
+pkg/jwt                  JWT sign/verify (HS256 Manager, RS256 RSAManager, both TokenManager), not yet wired to a route
 examples/api              smallest possible feature skeleton (route → handler → envelope)
 examples/crud             full worked CRUD feature (users), compiled but not mounted
 migrations/               SQL migration files
